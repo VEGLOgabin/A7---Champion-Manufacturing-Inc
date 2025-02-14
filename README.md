@@ -1,68 +1,69 @@
-# A7---Champion-Manufacturing-Inc
+# Champion Manufacturing Web Scraper
 
+## Overview
+This project is a web scraper designed to extract product details from the Champion Manufacturing website. It utilizes **Playwright** for browser automation, **Pandas** for data handling, and **Rich** for enhanced terminal output.
 
-Sheet Headers:
-mfr website
-mfr name
-model name
-mfr number
-unit cost
-product description
-amps
-volts
-watts
-phase
-hertz
-plug_type
-emergency_power Required (Y/N)
-dedicated_circuit Required (Y/N)
-tech_conect Required
-btu 
-dissipation_type
-water_cold Required (Y/N)
-water_hot  Required (Y/N)
-drain Required (Y/N)
-water_treated (Y/N)
-steam  Required(Y/N)
-vent  Required (Y/N)
-vacuum Required (Y/N)
-ship_weight
-weight
-depth
-height
-width
-ada compliant (Y/N)
-green certification? (Y/N)
-antimicrobial coating (Y/N)
-Specification Sheet (pdf)
-Brochure (pdf)
-Manual/IFU (pdf)
-Product URL
-CAD (dwg)
-REVIT (rfa)
-Seismic document
-Product Image (jpg)
-Product Image
+## Features
+- Searches for products using Manufacturer Number.
+- Extracts product details including:
+  - Product URL
+  - Image URL
+  - Description
+  - Dimensions (Width, Height, Depth, Weight Capacity)
+  - Standard Features
+- Saves extracted data into an **Excel file**.
 
+## Installation
 
+Before running the scraper, ensure you have the required dependencies installed:
 
+```bash
+pip install asyncio pandas playwright rich openpyxl
+```
 
+You also need to install Playwright browsers:
 
-Hi @Veglo Houetchenou Gabin & @~™,
+```bash
+playwright install
+```
 
-I appreciate the detailed document, but I believe we can make the process more efficient. Instead of including repeated "nothing found" screenshots, you can take a more concise approach.
+## Usage
 
-If you find only 5 or 10 products out of a list of 100, while 90 are missing, you can:
+Run the script with:
 
-- Search using the MFG number and Model/MFG name, if couldn't found, then include a screenshot for reference. Jo it once.
-- For other missing products, simply copy and paste them into the document.
+```bash
+python scraper.py
+```
 
-At the end of the document, summarize the results:
-Found: X
-Missing: X
+### Arguments
+- **excel_path**: Path to the input Excel file containing product data.
+- **output_filename**: Path where the scraped data will be saved.
+- **baseurl**: Base URL for Champion Manufacturing search.
+- **found**: Counter for products found.
+- **missing**: Counter for missing products.
+- **headless**: Boolean flag for headless browser mode (default: `False`).
 
-This way, we save time while maintaining clarity. If you come across any unique details, feel free to include them for reference.
+## Output
+The scraper generates an Excel file containing the extracted data in the **Grainger** sheet. It includes columns for product details such as images, descriptions, dimensions, and standard features.
 
-Now, I’d like a quick update: How many products were found, and how many are missing? Please provide an individual list so I can look into it further.
+## Example Code
 
-Thanks!
+```python
+scraper = ChampionManufacturingScraper(
+    excel_path="Champion Manufacturing Content.xlsx",
+    output_filename="output/Champion-manufacturing-output.xlsx",
+    baseurl="https://championchair.com?s=",
+    found=0,
+    missing=0,
+    headless=False
+)
+asyncio.run(scraper.run())
+```
+
+## Notes
+- Ensure the **Excel file** contains a sheet named `Grainger` with a column for `mfr number`.
+- The scraper runs asynchronously using **asyncio**.
+- Modify the `baseurl` if the website structure changes.
+
+## License
+This project is licensed under the **MIT License**.
