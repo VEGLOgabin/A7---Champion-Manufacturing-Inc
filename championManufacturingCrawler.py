@@ -2,7 +2,7 @@ import asyncio
 import pandas as pd
 from playwright.async_api import async_playwright, expect
 from rich import print
-
+import re
 
 class ChampionManufacturingScraper:
     """Web scraper for extracting product details from the Champion Manufacturing."""
@@ -36,7 +36,7 @@ class ChampionManufacturingScraper:
             if await nothing_found_locator.is_visible():
                 nothing_found_text = await nothing_found_locator.text_content()
                 if "Nothing Found" in nothing_found_text:
-                    print(f"[red]No products found for {mfr_number}[/red]")
+                    # print(f"[red]No products found for {mfr_number}[/red]")
 
                     return None
 
@@ -48,7 +48,7 @@ class ChampionManufacturingScraper:
                 if "/product/" in url:
                     return url
                 else:
-                    print(f"[red]No products found for {mfr_number}[/red]")
+                    # print(f"[red]No products found for {mfr_number}[/red]")
                     return None
         except Exception as e:
             print(f"Error occurred: {e}")
@@ -61,101 +61,121 @@ class ChampionManufacturingScraper:
         new_page = await self.context.new_page()
         await new_page.goto(url)
 
-        data = {"url": url, "image": "", "price": "", "description": "", "dimensions": {}, "green certification": "N"}
+        data = {
+            "url": url,
+            "image": "",
+            "description": "",
+            "dimensions": {},
+            "standard features": []
+        }
 
-        # Extract Image
+        # Extract Product Image (jpg)
         try:
-            image_locator = new_page.locator('//div[@id="swiper-pdp-gallery"]/div/div/a/img')
+            image_locator = new_page.locator(
+                '//div[contains(@class, "carousel-inner")]//div[contains(@class, "carousel-item active")]//figure/img'
+            )
             await expect(image_locator).to_be_visible(timeout=5000)
             data["image"] = await image_locator.get_attribute("src")
-        except:
-            pass
+        except Exception as e:
+            print(f"Error extracting image: {e}")
 
-        # Extract Price
+        # Extract Product Description
         try:
-            price_locator = new_page.locator('//span[@class="text-red"]/span[@class="pdp-price__price"]')
-            await expect(price_locator).to_be_visible(timeout=5000)
-            data["price"] = await price_locator.text_content()
-        except:
-            pass
+            description_locator = new_page.locator('p.mt-2.pt-4.pb-4.pb-md-4.desktop')
 
-        # Extract Description
-        try:
-            description_locator = new_page.locator('//div[@class="pdp-main__short-desc"]/p')
             await expect(description_locator).to_be_visible(timeout=5000)
-            data["description"] = await description_locator.text_content()
-        except:
-            pass
+            description_raw = await description_locator.text_content()    #.replace('\n',"").replace('\t',"").replace('\xa0',"")
+            data["description"] = re.sub(r'\s+', ' ', description_raw).strip()
+        except Exception as e:
+            print(f"Error extracting description: {e}")
 
-        # Extract Dimensions
+        # Extract Measurements and Dimensions
         try:
-            dimensions = await new_page.locator('//details[@id="dimensions"]//div[@class="metafield-rich_text_field"]/ul/li').all()
-            for dimension in dimensions:
-                info = (await dimension.text_content()).strip()
-                if ":" in info:
-                    label, value = info.split(":", 1)
-                    data["dimensions"][label.strip()] = value.strip()
-        except:
-            pass
+            # Locate each row in the dimensions table
+            dimension_rows = await new_page.locator('//div[@id="collapsemanualOne"]//table//tr').all()
+            for row in dimension_rows:
+                cells = await row.locator('td').all_text_contents()
+                if len(cells) >= 2:
+                    label = cells[0].strip()
+                    value = cells[1].strip()
+                    if "Overall Width" in label:
+                        data["dimensions"]["width"] = value.split('"')[0]
+                    if "Overall Height" in label:
+                        data["dimensions"]["height"] = value.split('"')[0]
+                    if "Weight Capacity" in label:
+                        data["dimensions"]["weight"] = value.split('lbs')[0]
+                    if "Overall Depth" in label:
+                        data["dimensions"]["depth"] = value.split('"')[0]                     
+                    data["dimensions"][label] = value
 
-        # Extract Green Certification
+        except Exception as e:
+            print(f"Error extracting dimensions: {e}")
+
+        # Extract Standard Features
         try:
-            certifications = await new_page.locator('//div[@class="pdp-icon flex center-vertically"]').all()
-            data["green certification"] = "Y" if any("GREEN" in await cert.text_content() for cert in certifications) else "N"
-        except:
-            pass
-
+            features_elements = await new_page.locator('//div[@class="card-body"]//ul[@class="features-list"]/li').all()
+            features_list = []
+            for feature in features_elements:
+                text = await feature.text_content()
+                features_list.append(text.strip())
+            data["standard features"] = features_list
+        except Exception as e:
+            print(f"Error extracting standard features: {e}")
         await new_page.close()
         return data
+
 
     async def run(self):
         """Main function to scrape product details and save them to an Excel file."""
 
-                
-        print("[blue]Sheet Headers:[/blue]")
-        for header in self.df.columns:
-            print(header)
-
         await self.launch_browser()
         await self.page.goto(self.baseurl)
 
-        # for index, row in self.df.iterrows():
-        #     mfr_number = row["mfr number"]
-        #     print(mfr_number)
-        #     url = await self.search_product(str(mfr_number))
-        #     if not url:
-        #         self.missing += 1
-        #     else:
-        #         self.found += 1
-        #     print(url)
-        # print("Found : ", self.found)
-        # print("Missing : ", self.missing)
+        for index, row in self.df.iterrows():
+            mfr_number = row["mfr number"]
+            model_name = row['model name']
+            url = await self.search_product(str(mfr_number))
+            if not url:
+                self.missing += 1
+            else:
+                self.found += 1
 
-            # if url:
-            #     product_data = await self.scrape_product_details(url)
-
-        #         if product_data:
-        #             print(f"[green]{mfr_number}[/green] - Data extracted successfully.")
-        #             self.df.at[index, "Product URL"] = product_data.get("url", "")
-        #             self.df.at[index, "unit cost"] = product_data.get("price", "")
-        #             self.df.at[index, "Product Image (jpg)"] = product_data.get("image", "")
-        #             self.df.at[index, "Product Image"] = product_data.get("image", "")
-        #             self.df.at[index, "product description"] = product_data.get("description", "")
-        #             self.df.at[index, "green certification? (Y/N)"] = product_data.get("green certification", "")
-        #             self.df.at[index, "depth"] = product_data["dimensions"].get("Overall Depth", "")
-        #             self.df.at[index, "height"] = product_data["dimensions"].get("Overall Height", "")
-        #             self.df.at[index, "width"] = product_data["dimensions"].get("Overall Width", "")
-        #     else:
-        #         print(f"[red]{mfr_number}[/red] - Not found")
-
-        # self.df.to_excel(self.output_filename, index=False, sheet_name="Haworth")
-        # await self.close_browser()
+            if url:
+                product_data = await self.scrape_product_details(url)
+                if product_data:
+                    print(f"[green]{model_name} | {mfr_number} [/green] - Data extracted successfully.")
+                    self.df.at[index, "Product URL"] = product_data.get("url", "")
+                    self.df.at[index, "Product Image (jpg)"] = product_data.get("image", "")
+                    self.df.at[index, "Product Image"] = product_data.get("image", "")
+                    self.df.at[index, "product description"] = product_data.get("description", "")
+                    self.df.at[index, "depth"] = product_data["dimensions"].get("depth", "")
+                    self.df.at[index, "height"] = product_data["dimensions"].get("height", "")
+                    self.df.at[index, "width"] = product_data["dimensions"].get("width", "")
+                    self.df.at[index, "weight"] = product_data["dimensions"].get("weight", "")
+                    self.df.at[index, "green certification? (Y/N)"] = "N"
+                    self.df.at[index, "emergency_power Required (Y/N)"] = "N"
+                    self.df.at[index, "dedicated_circuit Required (Y/N)"] = "N"
+                    self.df.at[index, "water_cold Required (Y/N)"] = "N"
+                    self.df.at[index, "water_hot  Required (Y/N)"] = "N"
+                    self.df.at[index, "drain Required (Y/N)"] = "N"
+                    self.df.at[index, "water_treated (Y/N)"] = "N"
+                    self.df.at[index, "steam  Required(Y/N)"] = "N"
+                    self.df.at[index, "vent  Required (Y/N)"] = "N"
+                    self.df.at[index, "vacuum Required (Y/N)"] = "N"
+                    self.df.at[index, "ada compliant (Y/N)"] = "N"
+                    self.df.at[index, "antimicrobial coating (Y/N)"] = "N"
+            else:
+                print(f"[red]{model_name} | {mfr_number} [/red] - Not found")
+        print(f"[red]Missing : {self.missing} [/red]")
+        print(f"[green]Found : {self.found} [/green]")
+        self.df.to_excel(self.output_filename, index=False, sheet_name="Grainger")
+        await self.close_browser()
 
 
 if __name__ == "__main__":
     scraper = ChampionManufacturingScraper(
         excel_path="Champion Manufacturing Content.xlsx",
-        output_filename="Champion-manufacturing-output.xlsx",
+        output_filename="output/Champion-manufacturing-output.xlsx",
         baseurl = "https://championchair.com?s=",
         found = 0 ,
         missing = 0,
