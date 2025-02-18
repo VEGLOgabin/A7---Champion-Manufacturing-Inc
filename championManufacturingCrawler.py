@@ -3,6 +3,7 @@ import pandas as pd
 from playwright.async_api import async_playwright, expect
 from rich import print
 import re
+import os
 
 class ChampionManufacturingScraper:
     """Web scraper for extracting product details from the Champion Manufacturing."""
@@ -98,16 +99,19 @@ class ChampionManufacturingScraper:
                 if len(cells) >= 2:
                     label = cells[0].strip()
                     value = cells[1].strip()
-                    if "Overall Width" in label:
-                        data["dimensions"]["width"] = value.split('"')[0]
-                    if "Overall Height" in label:
-                        data["dimensions"]["height"] = value.split('"')[0]
-                    if "Weight Capacity" in label:
-                        data["dimensions"]["weight"] = value.split('lbs')[0]
-                    if "Overall Depth" in label:
-                        data["dimensions"]["depth"] = value.split('"')[0]                     
-                    data["dimensions"][label] = value
 
+                    if value:  # Check if value is not empty
+                        # Handle ranges (e.g., "29″ – 34″")
+                        value = value.split("–")[0].strip()
+
+                        if "Overall Width" in label:
+                            data["dimensions"]["width"] = value.split('"')[0].strip().split("(")[0].strip()
+                        if "Overall Height" in label or "Seat Height Range " in label or "Standard Height" in label:
+                            data["dimensions"]["height"] = value.split('"')[0].strip().split("(")[0].strip()
+                        if "Weight Capacity" in label:
+                            data["dimensions"]["weight"] = value.split('lbs')[0].strip().split("(")[0].strip()
+                        if "Overall Depth" in label:
+                            data["dimensions"]["depth"] = value.split('"')[0].strip().split("(")[0].strip()
         except Exception as e:
             print(f"Error extracting dimensions: {e}")
 
@@ -139,7 +143,6 @@ class ChampionManufacturingScraper:
                 self.missing += 1
             else:
                 self.found += 1
-
             if url:
                 product_data = await self.scrape_product_details(url)
                 if product_data:
@@ -148,10 +151,10 @@ class ChampionManufacturingScraper:
                     self.df.at[index, "Product Image (jpg)"] = product_data.get("image", "")
                     self.df.at[index, "Product Image"] = product_data.get("image", "")
                     self.df.at[index, "product description"] = product_data.get("description", "")
-                    self.df.at[index, "depth"] = product_data["dimensions"].get("depth", "")
-                    self.df.at[index, "height"] = product_data["dimensions"].get("height", "")
-                    self.df.at[index, "width"] = product_data["dimensions"].get("width", "")
-                    self.df.at[index, "weight"] = product_data["dimensions"].get("weight", "")
+                    self.df.at[index, "depth"] = product_data["dimensions"].get("depth", "").split('″')[0].strip().split("(")[0].strip()
+                    self.df.at[index, "height"] = product_data["dimensions"].get("height", "").split('″')[0].strip().split("(")[0].strip()
+                    self.df.at[index, "width"] = product_data["dimensions"].get("width", "").split('″')[0].strip().split("(")[0].strip()
+                    self.df.at[index, "weight"] = product_data["dimensions"].get("weight", "").split('″')[0].strip().split("(")[0].strip()
                     self.df.at[index, "green certification? (Y/N)"] = "N"
                     self.df.at[index, "emergency_power Required (Y/N)"] = "N"
                     self.df.at[index, "dedicated_circuit Required (Y/N)"] = "N"
@@ -173,6 +176,8 @@ class ChampionManufacturingScraper:
 
 
 if __name__ == "__main__":
+    output_dir = 'output'
+    os.makedirs(output_dir, exist_ok=True)
     scraper = ChampionManufacturingScraper(
         excel_path="Champion Manufacturing Content.xlsx",
         output_filename="output/Champion-manufacturing-output.xlsx",
